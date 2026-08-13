@@ -34,7 +34,7 @@ st.set_page_config(page_title="LoanSign · Document e-Signing", page_icon="📝"
 # (e.g. "https://loansign.streamlit.app"). It's used purely to build the
 # link shown to the admin — the customer's browser already knows its own URL,
 # so this constant is never relied on in the customer flow.
-BASE_URL = "https://your-app-name.streamlit.app"
+BASE_URL = "https://loan-agreement-r405.onrender.com"
 
 AGREEMENT_TERMS = (
     "By signing below, the borrower named above acknowledges and agrees to the terms of "
