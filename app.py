@@ -256,7 +256,7 @@ def admin_flow() -> None:
         st.markdown("**Loan Terms**")
         col3, col4, col5 = st.columns(3)
         with col3:
-            apr = st.number_input("APR (%)", min_value=0.0, max_value=100.0, value=8, step=0.01, format="%.2f")
+            apr = st.number_input("APR (%)", min_value=0.0, max_value=100.0, value=8.0, step=0.01, format="%.2f")
         with col4:
             term_months = st.number_input("Loan Term (months)", min_value=1, max_value=480, value=36, step=1)
         with col5:
