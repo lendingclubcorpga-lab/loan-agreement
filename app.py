@@ -10,9 +10,11 @@ Run with:
     streamlit run app.py
 """
 
+import calendar
 import io
-from datetime import datetime
+from datetime import date, datetime
 from textwrap import wrap
+from typing import Optional
 from urllib.parse import urlencode
 
 import streamlit as st
@@ -34,7 +36,7 @@ st.set_page_config(page_title="LoanSign · Document e-Signing", page_icon="📝"
 # (e.g. "https://loansign.streamlit.app"). It's used purely to build the
 # link shown to the admin — the customer's browser already knows its own URL,
 # so this constant is never relied on in the customer flow.
-BASE_URL = "https://loan-agreement-r405.onrender.com"
+BASE_URL = "https://your-app-name.streamlit.app"
 
 AGREEMENT_TERMS = (
     "By signing below, the borrower named above acknowledges and agrees to the terms of "
@@ -47,13 +49,67 @@ AGREEMENT_TERMS = (
 
 REQUIRED_FIELDS = ["name", "address", "amount", "email"]
 
+# Loan-terms fields are optional so links generated before this feature was
+# added still work — the customer view just skips the "Loan Terms" section
+# if any of these are missing.
+LOAN_TERMS_FIELDS = [
+    "apr", "term_months", "orig_fee_pct", "orig_fee_amt",
+    "monthly_payment", "total_interest", "total_repayment",
+    "total_cost", "payoff_date",
+]
+
+
+def _add_months(start: date, months: int) -> date:
+    """Add a whole number of calendar months to a date, clamping the day
+    to the last valid day of the resulting month (e.g. Jan 31 + 1mo -> Feb 28/29)."""
+    total_month_index = start.month - 1 + months
+    year = start.year + total_month_index // 12
+    month = total_month_index % 12 + 1
+    day = min(start.day, calendar.monthrange(year, month)[1])
+    return start.replace(year=year, month=month, day=day)
+
+
+def compute_loan_terms(principal: float, apr_pct: float, term_months: int,
+                        origination_fee_pct: float, start: date) -> dict:
+    """Standard amortized-loan math: fixed monthly payment, total interest,
+    origination fee, total cost, and the payoff date."""
+    monthly_rate = apr_pct / 100 / 12
+    n = term_months
+
+    if monthly_rate > 0:
+        monthly_payment = (
+            principal * monthly_rate * (1 + monthly_rate) ** n
+            / ((1 + monthly_rate) ** n - 1)
+        )
+    else:
+        monthly_payment = principal / n
+
+    total_repayment = monthly_payment * n
+    total_interest = total_repayment - principal
+    origination_fee_amt = principal * origination_fee_pct / 100
+    total_cost = total_repayment + origination_fee_amt
+    payoff_date = _add_months(start, n)
+
+    return {
+        "apr": f"{apr_pct:.2f}",
+        "term_months": str(n),
+        "orig_fee_pct": f"{origination_fee_pct:.2f}",
+        "orig_fee_amt": f"{origination_fee_amt:.2f}",
+        "monthly_payment": f"{monthly_payment:.2f}",
+        "total_interest": f"{total_interest:.2f}",
+        "total_repayment": f"{total_repayment:.2f}",
+        "total_cost": f"{total_cost:.2f}",
+        "payoff_date": payoff_date.strftime("%B %d, %Y"),
+    }
+
 
 # --------------------------------------------------------------------------
 # PDF generation
 # --------------------------------------------------------------------------
 
 def generate_pdf(name: str, address: str, amount: str, email: str,
-                  signature_img: Image.Image, timestamp: str) -> io.BytesIO:
+                  signature_img: Image.Image, timestamp: str,
+                  loan_terms: Optional[dict] = None) -> io.BytesIO:
     """Render a one-page signed loan agreement PDF and return it as a buffer."""
     buffer = io.BytesIO()
     c = pdf_canvas.Canvas(buffer, pagesize=letter)
@@ -91,6 +147,46 @@ def generate_pdf(name: str, address: str, amount: str, email: str,
         y -= 0.24 * inch
 
     y -= 0.15 * inch
+
+    # --- Loan Terms -----------------------------------------------------------
+    if loan_terms:
+        c.setFont("Helvetica-Bold", 13)
+        c.drawString(margin, y, "Loan Terms")
+        y -= 0.28 * inch
+
+        left_col = [
+            ("APR:", f"{loan_terms['apr']}%"),
+            ("Origination Fee:", f"{loan_terms['orig_fee_pct']}% (${loan_terms['orig_fee_amt']})"),
+            ("Monthly Payment:", f"${loan_terms['monthly_payment']}"),
+        ]
+        right_col = [
+            ("Total Interest:", f"${loan_terms['total_interest']}"),
+            ("Total Repayment:", f"${loan_terms['total_repayment']}"),
+            ("Total Cost of Loan:", f"${loan_terms['total_cost']}"),
+        ]
+        row_y = y
+        for label, value in left_col:
+            c.setFont("Helvetica-Bold", 10)
+            c.drawString(margin, row_y, label)
+            c.setFont("Helvetica", 10)
+            c.drawString(margin + 1.5 * inch, row_y, value)
+            row_y -= 0.22 * inch
+
+        row_y = y
+        col2_x = margin + 3.3 * inch
+        for label, value in right_col:
+            c.setFont("Helvetica-Bold", 10)
+            c.drawString(col2_x, row_y, label)
+            c.setFont("Helvetica", 10)
+            c.drawString(col2_x + 1.5 * inch, row_y, value)
+            row_y -= 0.22 * inch
+
+        y -= 0.22 * inch * 3 + 0.1 * inch
+        c.setFont("Helvetica-Bold", 10)
+        c.drawString(margin, y, "Payoff Date:")
+        c.setFont("Helvetica", 10)
+        c.drawString(margin + 1.5 * inch, y, loan_terms["payoff_date"])
+        y -= 0.32 * inch
 
     # --- Terms --------------------------------------------------------------
     c.setFont("Helvetica-Bold", 13)
@@ -157,6 +253,15 @@ def admin_flow() -> None:
             email = st.text_input("Email", placeholder="jane@example.com")
             address = st.text_input("Address", placeholder="123 Main St, Springfield")
 
+        st.markdown("**Loan Terms**")
+        col3, col4, col5 = st.columns(3)
+        with col3:
+            apr = st.number_input("APR (%)", min_value=0.0, max_value=100.0, value=9.73, step=0.01, format="%.2f")
+        with col4:
+            term_months = st.number_input("Loan Term (months)", min_value=1, max_value=480, value=36, step=1)
+        with col5:
+            orig_fee_pct = st.number_input("Origination Fee (%)", min_value=0.0, max_value=100.0, value=2.5, step=0.1, format="%.2f")
+
         submitted = st.form_submit_button("🔗 Generate Signing Link", use_container_width=True)
 
     if not submitted:
@@ -176,11 +281,21 @@ def admin_flow() -> None:
         st.error("⚠️ Please enter a valid email address.")
         return
 
+    principal = float(amount.replace(",", "").replace("$", ""))
+    loan_terms = compute_loan_terms(
+        principal=principal,
+        apr_pct=apr,
+        term_months=int(term_months),
+        origination_fee_pct=orig_fee_pct,
+        start=date.today(),
+    )
+
     params = {
         "name": name.strip(),
         "address": address.strip(),
         "amount": amount.strip(),
         "email": email.strip(),
+        **loan_terms,
     }
     full_link = f"{BASE_URL}?{urlencode(params)}"
 
@@ -221,6 +336,21 @@ def customer_flow(params) -> None:
         c1.markdown(f"**Loan Amount**  \n${amount}")
         c2.markdown(f"**Email**  \n{email}")
         c2.markdown(f"**Address**  \n{address}")
+
+        loan_terms = {field: params.get(field, "").strip() for field in LOAN_TERMS_FIELDS}
+        has_loan_terms = all(loan_terms.values())
+
+        if has_loan_terms:
+            st.divider()
+            st.subheader("Loan Terms")
+            t1, t2 = st.columns(2)
+            t1.markdown(f"**APR**  \n{loan_terms['apr']}%")
+            t1.markdown(f"**Origination Fee**  \n{loan_terms['orig_fee_pct']}% (${loan_terms['orig_fee_amt']})")
+            t1.markdown(f"**Monthly Payment**  \n${loan_terms['monthly_payment']}")
+            t2.markdown(f"**Total Interest**  \n${loan_terms['total_interest']}")
+            t2.markdown(f"**Total Repayment Amount**  \n${loan_terms['total_repayment']}")
+            t2.markdown(f"**Total Cost of Loan**  \n${loan_terms['total_cost']}")
+            st.markdown(f"**Payoff Date**  \n{loan_terms['payoff_date']}")
 
         st.divider()
         st.subheader("Agreement Terms")
@@ -276,7 +406,10 @@ def customer_flow(params) -> None:
     with col2:
         if signature_ready:
             timestamp = datetime.now().strftime("%B %d, %Y at %I:%M %p")
-            pdf_buffer = generate_pdf(name, address, amount, email, sig_img, timestamp)
+            pdf_buffer = generate_pdf(
+                name, address, amount, email, sig_img, timestamp,
+                loan_terms=loan_terms if has_loan_terms else None,
+            )
             st.download_button(
                 "⬇️ Download Signed Agreement (PDF)",
                 data=pdf_buffer,
