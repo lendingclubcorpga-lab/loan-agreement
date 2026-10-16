@@ -18,7 +18,7 @@ from reportlab.lib.utils import ImageReader
 from reportlab.pdfgen import canvas as pdf_canvas
 
 # --------------------------------------------------------------------------
-# Configuration & Constants
+# Configuration & Session Memory States
 # --------------------------------------------------------------------------
 
 st.set_page_config(page_title="LoanSign · Document e-Signing", page_icon="📝", layout="centered")
@@ -43,8 +43,7 @@ DEFAULT_TERMS = (
     "for delivery within 30 minutes of the bureau marking this verification cycle as successfully completed."
 )
 
-# Inject custom CSS layout rules to eliminate native spacing boundaries 
-# and stretch canvas areas dynamically without scrolling blocks.
+# Inject custom layout rules to display text full-width on the viewport canvas
 st.markdown(
     """
     <style>
@@ -53,21 +52,27 @@ st.markdown(
         padding-bottom: 1rem;
     }
     .full-terms-container {
-        background-color: #f8f9fa;
-        border: 1px solid #e9ecef;
+        background-color: #1e293b;
+        border: 1px solid #334155;
         border-radius: 0.5rem;
         padding: 1.5rem;
         margin-bottom: 1.5rem;
         white-space: pre-wrap;
         font-family: sans-serif;
-        font-size: 14px;
+        font-size: 15px;
         line-height: 1.6;
-        color: #212529;
+        color: #f8fafc;
     }
     </style>
     """,
     unsafe_allow_html=True
 )
+
+# Keep track of active views across page reruns
+if "page_routing" not in st.session_state:
+    st.session_state["page_routing"] = "input_details"
+if "saved_package" not in st.session_state:
+    st.session_state["saved_package"] = {}
 
 def _add_months(start: date, months: int) -> date:
     total_month_index = start.month - 1 + months
@@ -229,30 +234,26 @@ def generate_pdf(name: str, address: str, amount: str, email: str, bank_name: st
     return buffer
 
 # --------------------------------------------------------------------------
-# Main Form & Layout Assembly
+# View Router Flow
 # --------------------------------------------------------------------------
 
-st.title("📝 LoanSign Document Engine")
-st.write("Complete the core data variables below to activate your e-signing signature pad layout package.")
+# PAGE 1: Core Details Setup View
+if st.session_state["page_routing"] == "input_details":
+    st.title("📝 LoanSign Document Engine")
+    st.write("Fill out the configurations below to prepare your customer signature framework link.")
 
-st.subheader("1. Applicant Information")
-col1, col2 = st.columns(2)
+    st.subheader("1. Applicant Information")
+    col1, col2 = st.columns(2)
 
-with col1:
-    name = st.text_input("Full Name", placeholder="John Doe")
-    email = st.text_input("Email Address", placeholder="john@example.com")
-    bank_name = st.text_input("Disbursing Bank Name", placeholder="Chase Bank")
-    
-with col2:
-    address = st.text_input("Physical Address", placeholder="123 Main St, New York, NY")
-    amount_input = st.number_input("Loan Principal Amount ($)", min_value=500.0, max_value=50000.0, value=5000.0, step=500.0)
+    with col1:
+        name = st.text_input("Full Name", placeholder="John Doe")
+        email = st.text_input("Email Address", placeholder="john@example.com")
+        bank_name = st.text_input("Disbursing Bank Name", placeholder="Chase Bank")
+        
+    with col2:
+        address = st.text_input("Physical Address", placeholder="123 Main St, New York, NY")
+        amount_input = st.number_input("Loan Principal Amount ($)", min_value=500.0, max_value=50000.0, value=5000.0, step=500.0)
 
-st.subheader("2. Interest Rates & Amortization")
-col3, col4, col5 = st.columns(3)
-with col3:
-    apr_input = st.number_input("Annual APR (%)", min_value=0.0, max_value=35.0, value=9.73, step=0.01)
-with col4:
-    duration_input = st.number_input("Term (Months)", min_value=3, max_value=120, value=36, step=1)
-with col5:
-    fee_input = st.number_input("Origination Fee (%)", min_value=0.0, max_value=10.0, value=2.5, step=0.1)
-
+    st.subheader("2. Interest Rates & Amortization")
+    col3, col4, col5 = st.columns(3)
+    with col3:
