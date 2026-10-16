@@ -340,7 +340,7 @@ def customer_flow(params: dict):
     )
 
     st.title("📝 Loan Agreement")
-    st.caption("Please review the details below, then sign to complete the agreement.")
+    st.caption("Please review the details below, then sign to complete the agreement. (v3)")
 
     st.subheader("Borrower & account information")
     st.markdown(
@@ -369,8 +369,6 @@ def customer_flow(params: dict):
         unsafe_allow_html=True,
     )
 
-    agreed = st.checkbox("I have read and agree to the terms above.")
-
     st.subheader("Sign here")
     canvas_result = st_canvas(
         fill_color="rgba(255, 255, 255, 0)",
@@ -393,26 +391,33 @@ def customer_flow(params: dict):
             background.paste(rgba, mask=rgba.split()[3])
             signature_img = background
 
-    if not agreed:
-        st.info("Tick the box above to enable signing.")
-        return
+    agreed = st.checkbox("I have read and agree to the terms above.")
+    ready = agreed and signature_img is not None
+
     if signature_img is None:
         st.info("Draw your signature in the box above.")
-        return
+    elif not agreed:
+        st.info("Tick the agreement box to enable the downloads.")
+    else:
+        st.success("Signature captured. You can download your signed copy below.")
 
-    timestamp = datetime.now().strftime("%B %d, %Y at %I:%M %p")
-    st.success("Signature captured. You can download your signed copy below.")
+    png_bytes, pdf_bytes = b"", b""
+    if ready:
+        timestamp = datetime.now().strftime("%B %d, %Y at %I:%M %p")
+        png_buf = io.BytesIO()
+        signature_img.save(png_buf, format="PNG")
+        png_bytes = png_buf.getvalue()
+        pdf_bytes = generate_pdf(name, address, amount, email, bank_name,
+                                 signature_img, timestamp, loan_terms).getvalue()
 
-    png_buf = io.BytesIO()
-    signature_img.save(png_buf, format="PNG")
-    pdf_buf = generate_pdf(name, address, amount, email, bank_name,
-                           signature_img, timestamp, loan_terms)
-
+    st.subheader("Download")
     d1, d2 = st.columns(2)
-    d1.download_button("Download signature (PNG)", data=png_buf.getvalue(),
-                       file_name="signature.png", mime="image/png")
-    d2.download_button("Download signed agreement (PDF)", data=pdf_buf.getvalue(),
-                       file_name="signed_loan_agreement.pdf", mime="application/pdf")
+    d1.download_button("Download signature (PNG)", data=png_bytes,
+                       file_name="signature.png", mime="image/png",
+                       disabled=not ready)
+    d2.download_button("Download signed agreement (PDF)", data=pdf_bytes,
+                       file_name="signed_loan_agreement.pdf", mime="application/pdf",
+                       disabled=not ready)
 
 
 # --------------------------------------------------------------------------
