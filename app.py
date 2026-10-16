@@ -50,8 +50,8 @@ def _add_months(start: date, months: int) -> date:
     year = start.year + total_month_index // 12
     month = total_month_index % 12 + 1
     # Secure maximum legal days boundary per month mapping safely
-    last_day = calendar.monthrange(year, month)[1]
-    day = min(start.day, last_day)
+    _, max_days = calendar.monthrange(year, month)
+    day = min(start.day, max_days)
     return start.replace(year=year, month=month, day=day)
 
 def compute_loan_terms(principal: float, apr_pct: float, term_months: int,
