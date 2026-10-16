@@ -56,7 +56,7 @@ AGREEMENT_TERMS = (
     "No payment from the borrower is required before disbursement, other than any origination fee "
     "disclosed in the Loan Terms, which is deducted from the loan proceeds.\n\n"
     "Section 4: Lender Information\n"
-    "Lender name, license number, and contact details: [LENDER TO COMPLETE]."
+    "ADVANCE AMERICA, license number, and contact details: [LENDER TO COMPLETE]."
 )
 
 REQUIRED_FIELDS = ["name", "address", "amount", "email", "bank_name"]
