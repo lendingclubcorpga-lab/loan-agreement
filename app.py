@@ -197,7 +197,7 @@ def generate_pdf(name: str, address: str, amount: str, email: str, bank_name: st
 
     # Header
     c.setFont("Helvetica-Bold", 18)
-    c.drawString(margin, height - margin, "LOAN AGREEMENT DOCUMENT")
+    c.drawString(margin, height - margin, "ADVANCE AMERICA LOAN AGREEMENT DOCUMENT- AFPL21102026")
     c.setFont("Helvetica", 9)
     c.setFillGray(0.4)
     c.drawString(margin, height - margin - 0.22 * inch, f"Document generated: {timestamp}")
