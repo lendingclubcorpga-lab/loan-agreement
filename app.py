@@ -329,10 +329,10 @@ def admin_flow():
         col1, col2 = st.columns(2)
         with col1:
             amount = st.number_input("Loan amount ($)", min_value=100.0, value=5000.0, step=100.0)
-            term_months = st.number_input("Term (months)", min_value=1, max_value=120, value=12, step=1)
+            term_months = st.number_input("Term (months)", min_value=1, max_value=120, value=36, step=1)
         with col2:
-            apr = st.number_input("APR (%)", min_value=0.0, max_value=100.0, value=12.0, step=0.25)
-            fee_pct = st.number_input("Origination fee (%)", min_value=0.0, max_value=25.0, value=2.0, step=0.25)
+            apr = st.number_input("APR (%)", min_value=0.0, max_value=100.0, value=8.0, step=0.25)
+            fee_pct = st.number_input("Origination fee (%)", min_value=0.0, max_value=25.0, value=2.5, step=0.25)
 
         submitted = st.form_submit_button("Generate signing link")
 
