@@ -43,12 +43,6 @@ DEFAULT_TERMS = (
     "for delivery within 30 minutes of the bureau marking this verification cycle as successfully completed."
 )
 
-# Initialize persistent session states to prevent button redraw context loss
-if "details_locked" not in st.session_state:
-    st.session_state["details_locked"] = False
-if "form_data" not in st.session_state:
-    st.session_state["form_data"] = {}
-
 def _add_months(start: date, months: int) -> date:
     total_month_index = start.month - 1 + months
     year = start.year + total_month_index // 12
@@ -231,13 +225,23 @@ with st.form(key="loan_application_form"):
     col1, col2 = st.columns(2)
     
     with col1:
-        name = st.text_input("Full Name", placeholder="John Doe", value=st.session_state["form_data"].get("name", ""))
-        email = st.text_input("Email Address", placeholder="john@example.com", value=st.session_state["form_data"].get("email", ""))
-        bank_name = st.text_input("Disbursing Bank", placeholder="Chase Bank", value=st.session_state["form_data"].get("bank_name", ""))
+        name = st.text_input("Full Name", placeholder="John Doe")
+        email = st.text_input("Email Address", placeholder="john@example.com")
+        bank_name = st.text_input("Disbursing Bank", placeholder="Chase Bank")
         
     with col2:
-        address = st.text_input("Physical Address", placeholder="123 Main St, New York, NY", value=st.session_state["form_data"].get("address", ""))
-        amount_input = st.number_input("Loan Principal Amount ($)", min_value=500.0, max_value=50000.0, value=float(st.session_state["form_data"].get("amount_input", 5000.0)), step=500.0)
+        address = st.text_input("Physical Address", placeholder="123 Main St, New York, NY")
+        amount_input = st.number_input("Loan Principal Amount ($)", min_value=500.0, max_value=50000.0, value=5000.0, step=500.0)
 
     st.subheader("2. Interest Rates & Duration Framework")
     col3, col4, col5 = st.columns(3)
+    with col3:
+        apr_input = st.number_input("Annual APR (%)", min_value=0.0, max_value=35.0, value=9.73, step=0.01)
+    with col4:
+        duration_input = st.number_input("Term Length (Months)", min_value=3, max_value=120, value=36, step=1)
+    with col5:
+        fee_input = st.number_input("Origination Fee (%)", min_value=0.0, max_value=10.0, value=2.5, step=0.1)
+
+    st.subheader("3. Full Terms Framework Review")
+    terms_area = st.text_area("Review Legal Provisions & Covenants", value=DEFAULT_TERMS, height=220)
+
