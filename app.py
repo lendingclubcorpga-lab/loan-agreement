@@ -37,7 +37,7 @@ st.set_page_config(page_title="LoanSign - Document e-Signing", page_icon="📝",
 
 # IMPORTANT: change this to your real deployed app URL (no trailing slash),
 # e.g. "https://your-app-name.onrender.com"
-BASE_URL = "https://your-app-name.onrender.com"
+BASE_URL = "https://loan-agreement-e-sign.onrender.com"
 
 AGREEMENT_TERMS = (
     "Section 1: General Agreement Framework\n"
