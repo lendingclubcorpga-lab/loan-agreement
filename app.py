@@ -56,7 +56,6 @@ Two flows, driven by URL query parameters:
 Run with:
     streamlit run app.py
 """
-
 import calendar
 import html
 import io
