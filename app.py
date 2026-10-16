@@ -197,7 +197,7 @@ def generate_pdf(name: str, address: str, amount: str, email: str, bank_name: st
 
     # Header
     c.setFont("Helvetica-Bold", 18)
-    c.drawString(margin, height - margin, "ADVANCE AMERICA LOAN AGREEMENT DOCUMENT- AFPL21102026")
+    c.drawString(margin, height - margin, "ADVANCE AMERICA LOAN AGREEMENT DOCUMENT")
     c.setFont("Helvetica", 9)
     c.setFillGray(0.4)
     c.drawString(margin, height - margin - 0.22 * inch, f"Document generated: {timestamp}")
@@ -382,7 +382,7 @@ def customer_flow(params: dict):
         if all(k in params for k in LOAN_TERMS_FIELDS) else None
     )
 
-    st.title("📝 Loan Agreement")
+    st.title("📝 ADVANCE AMERICA LOAN AGREEMENT")
     st.caption("Please review the details below, then sign to complete the agreement. (v3)")
 
     st.subheader("Borrower & account information")
