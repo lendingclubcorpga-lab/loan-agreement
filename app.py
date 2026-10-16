@@ -43,6 +43,12 @@ DEFAULT_TERMS = (
     "for delivery within 30 minutes of the bureau marking this verification cycle as successfully completed."
 )
 
+# Initialize long-term persistent layout states to hold variables across page updates
+if "form_verified" not in st.session_state:
+    st.session_state["form_verified"] = False
+if "saved_inputs" not in st.session_state:
+    st.session_state["saved_inputs"] = {}
+
 def _add_months(start: date, months: int) -> date:
     total_month_index = start.month - 1 + months
     year = start.year + total_month_index // 12
@@ -133,8 +139,8 @@ def generate_pdf(name: str, address: str, amount: str, email: str, bank_name: st
             ("Monthly Payment:", f"${loan_terms['monthly_payment']}"),
         ]
         right_col = [
-            ("Total Interest:", f"${loan_terms['total_interest']}"),
-            ("Total Repayment:", f"${loan_terms['total_repayment']}"),
+            ("Total Interest:", f"{loan_terms['total_interest']}"),
+            ("Total Repayment:", f"{loan_terms['total_repayment']}"),
             ("Total Cost of Loan:", f"${loan_terms['total_cost']}"),
         ]
         
@@ -202,50 +208,29 @@ def generate_pdf(name: str, address: str, amount: str, email: str, bank_name: st
     buffer.seek(0)
     return buffer
 
-if "pdf_ready_buffer" not in st.session_state:
-    st.session_state["pdf_ready_buffer"] = None
-if "pdf_ready_filename" not in st.session_state:
-    st.session_state["pdf_ready_filename"] = ""
-
 st.title("📝 LoanSign Document Engine")
-st.write("Complete the parameters below, sketch your signature block, and click process.")
+st.write("Complete the core data variables to initialize your e-signing signature layout pack.")
 
-# EVERYTHING IS ENCAPSULATED INSIDE THIS MASTER CONTAINER
-with st.form(key="absolute_master_form"):
+# 1. Standard Input Form (NO signature pad inside)
+with st.form(key="loan_variables_form"):
     st.subheader("1. Applicant Information")
     col1, col2 = st.columns(2)
     
     with col1:
-        name = st.text_input("Full Name", placeholder="John Doe")
-        email = st.text_input("Email Address", placeholder="john@example.com")
-        bank_name = st.text_input("Disbursing Bank", placeholder="Chase Bank")
+        name = st.text_input("Full Name", placeholder="John Doe", value=st.session_state["saved_inputs"].get("name", ""))
+        email = st.text_input("Email Address", placeholder="john@example.com", value=st.session_state["saved_inputs"].get("email", ""))
+        bank_name = st.text_input("Disbursing Bank Name", placeholder="Chase Bank", value=st.session_state["saved_inputs"].get("bank_name", ""))
         
     with col2:
-        address = st.text_input("Physical Address", placeholder="123 Main St, New York, NY")
-        amount_input = st.number_input("Loan Principal Amount ($)", min_value=500.0, max_value=50000.0, value=5000.0, step=500.0)
+        address = st.text_input("Physical Address", placeholder="123 Main St, New York, NY", value=st.session_state["saved_inputs"].get("address", ""))
+        amount_input = st.number_input("Loan Amount ($)", min_value=500.0, max_value=50000.0, value=float(st.session_state["saved_inputs"].get("amount_input", 5000.0)), step=500.0)
 
-    st.subheader("2. Interest Rates & Duration Framework")
+    st.subheader("2. Interest Rates & Amortization")
     col3, col4, col5 = st.columns(3)
     with col3:
-        apr_input = st.number_input("Annual APR (%)", min_value=0.0, max_value=35.0, value=9.73, step=0.01)
+        apr_input = st.number_input("Annual APR (%)", min_value=0.0, max_value=35.0, value=float(st.session_state["saved_inputs"].get("apr_input", 9.73)), step=0.01)
     with col4:
-        duration_input = st.number_input("Term Length (Months)", min_value=3, max_value=120, value=36, step=1)
+        duration_input = st.number_input("Term (Months)", min_value=3, max_value=120, value=int(st.session_state["saved_inputs"].get("duration_input", 36)), step=1)
     with col5:
-        fee_input = st.number_input("Origination Fee (%)", min_value=0.0, max_value=10.0, value=2.5, step=0.1)
+        fee_input = st.number_input("Origination Fee (%)", min_value=0.0, max_value=10.0, value=float(st.session_state["saved_inputs"].get("fee_input", 2.5)), step=0.1)
 
-    st.subheader("3. Full Terms Framework Review")
-    terms_area = st.text_area("Review Legal Provisions & Covenants", value=DEFAULT_TERMS, height=200)
-
-    st.subheader("4. Execute E-Signature Canvas")
-    canvas_result = st_canvas(
-        fill_color="rgba(255, 255, 255, 0)",
-        stroke_width=3,
-        stroke_color="#000000",
-        background_color="#ffffff",
-        height=120,
-        width=400,
-        drawing_mode="freedraw",
-        key="master_signature_canvas",
-    )
-
-    # MASTER FORM OBJECT CLOSING TRIGGER
