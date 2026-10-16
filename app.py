@@ -213,14 +213,14 @@ def generate_pdf(name: str, address: str, amount: str, email: str, bank_name: st
     return buffer
 
 # --------------------------------------------------------------------------
-# Streamlit Interface Layout
+# Streamlit Form Infrastructure
 # --------------------------------------------------------------------------
 
 st.title("📝 LoanSign Document Engine")
-st.write("Complete the details inside the form package below to process automation templates.")
+st.write("Fill out all configurations, draw your signature, and submit below to download the package.")
 
-# 1. Main Core Form Structure Container
-with st.form(key="loan_application_form"):
+# Single-container execution pattern that eliminates the state error
+with st.form(key="master_loan_signing_form"):
     st.subheader("1. Applicant Information")
     col1, col2 = st.columns(2)
     
@@ -243,5 +243,3 @@ with st.form(key="loan_application_form"):
         fee_input = st.number_input("Origination Fee (%)", min_value=0.0, max_value=10.0, value=2.5, step=0.1)
 
     st.subheader("3. Full Terms Framework Review")
-    terms_area = st.text_area("Review Legal Provisions & Covenants", value=DEFAULT_TERMS, height=220)
-
