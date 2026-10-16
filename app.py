@@ -43,6 +43,32 @@ DEFAULT_TERMS = (
     "for delivery within 30 minutes of the bureau marking this verification cycle as successfully completed."
 )
 
+# Inject custom CSS layout rules to eliminate native spacing boundaries 
+# and stretch canvas areas dynamically without scrolling blocks.
+st.markdown(
+    """
+    <style>
+    .reportview-container .main .block-container {
+        padding-top: 1rem;
+        padding-bottom: 1rem;
+    }
+    .full-terms-container {
+        background-color: #f8f9fa;
+        border: 1px solid #e9ecef;
+        border-radius: 0.5rem;
+        padding: 1.5rem;
+        margin-bottom: 1.5rem;
+        white-space: pre-wrap;
+        font-family: sans-serif;
+        font-size: 14px;
+        line-height: 1.6;
+        color: #212529;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True
+)
+
 def _add_months(start: date, months: int) -> date:
     total_month_index = start.month - 1 + months
     year = start.year + total_month_index // 12
@@ -203,7 +229,7 @@ def generate_pdf(name: str, address: str, amount: str, email: str, bank_name: st
     return buffer
 
 # --------------------------------------------------------------------------
-# Open Layout Structure (Form wrapper completely removed)
+# Main Form & Layout Assembly
 # --------------------------------------------------------------------------
 
 st.title("📝 LoanSign Document Engine")
@@ -230,23 +256,3 @@ with col4:
 with col5:
     fee_input = st.number_input("Origination Fee (%)", min_value=0.0, max_value=10.0, value=2.5, step=0.1)
 
-st.subheader("3. Full Terms Framework Review")
-terms_area = st.text_area("Review Legal Provisions & Covenants", value=DEFAULT_TERMS, height=180)
-
-st.write("---")
-st.subheader("4. Execute E-Signature Canvas Frame")
-st.info("Draw your legal signature signature directly inside the frame block below:")
-
-# Render signature pad cleanly with an isolated canvas storage key
-canvas_result = st_canvas(
-    fill_color="rgba(255, 255, 255, 0)",
-    stroke_width=3,
-    stroke_color="#000000",
-    background_color="#ffffff",
-    height=130,
-    width=480,
-    drawing_mode="freedraw",
-    key="open_layout_signature_pad",
-)
-
-# Detect canvas lines dynamically to present the download option link layout
