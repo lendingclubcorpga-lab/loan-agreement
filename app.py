@@ -82,20 +82,14 @@ def compute_loan_terms(principal: float, apr_pct: float, term_months: int,
         "payoff_date": payoff_date.strftime("%B %d, %Y"),
     }
 
-# --------------------------------------------------------------------------
-# PDF generation
-# --------------------------------------------------------------------------
-
 def generate_pdf(name: str, address: str, amount: str, email: str, bank_name: str,
                   signature_img: Optional[Image.Image], timestamp: str,
                   custom_terms: str, loan_terms: Optional[dict] = None) -> io.BytesIO:
-    """Render a clean loan agreement PDF matching the data attributes."""
     buffer = io.BytesIO()
     c = pdf_canvas.Canvas(buffer, pagesize=letter)
     width, height = letter
     margin = 1 * inch
 
-    # --- Header ---
     c.setFont("Helvetica-Bold", 18)
     c.drawString(margin, height - margin, "LOAN AGREEMENT DOCUMENT")
     c.setFont("Helvetica", 9)
@@ -107,7 +101,6 @@ def generate_pdf(name: str, address: str, amount: str, email: str, bank_name: st
 
     y = height - margin - 0.65 * inch
 
-    # --- Borrower & Bank Info ---
     c.setFont("Helvetica-Bold", 13)
     c.drawString(margin, y, "Account & Borrower Information")
     y -= 0.28 * inch
@@ -129,7 +122,6 @@ def generate_pdf(name: str, address: str, amount: str, email: str, bank_name: st
 
     y -= 0.15 * inch
 
-    # --- Loan Amortization Terms ---
     if loan_terms:
         c.setFont("Helvetica-Bold", 13)
         c.drawString(margin, y, "Loan Terms & Calculation")
@@ -170,7 +162,6 @@ def generate_pdf(name: str, address: str, amount: str, email: str, bank_name: st
         c.drawString(margin + 1.5 * inch, y, loan_terms["payoff_date"])
         y -= 0.32 * inch
 
-    # --- Agreement Terms ---
     c.setFont("Helvetica-Bold", 13)
     c.drawString(margin, y, "Terms & Conditions")
     y -= 0.24 * inch
@@ -190,7 +181,6 @@ def generate_pdf(name: str, address: str, amount: str, email: str, bank_name: st
             c.drawString(margin, y, line)
             y -= 0.18 * inch
             
-    # --- Signature Placement ---
     y -= 0.4 * inch
     if y < margin + 1.5 * inch:
         c.showPage()
@@ -212,15 +202,16 @@ def generate_pdf(name: str, address: str, amount: str, email: str, bank_name: st
     buffer.seek(0)
     return buffer
 
-# --------------------------------------------------------------------------
-# Streamlit Form Infrastructure
-# --------------------------------------------------------------------------
+if "pdf_ready_buffer" not in st.session_state:
+    st.session_state["pdf_ready_buffer"] = None
+if "pdf_ready_filename" not in st.session_state:
+    st.session_state["pdf_ready_filename"] = ""
 
 st.title("📝 LoanSign Document Engine")
-st.write("Fill out all configurations, draw your signature, and submit below to download the package.")
+st.write("Complete the parameters below, sketch your signature block, and click process.")
 
-# Single-container execution pattern that eliminates the state error
-with st.form(key="master_loan_signing_form"):
+# EVERYTHING IS ENCAPSULATED INSIDE THIS MASTER CONTAINER
+with st.form(key="absolute_master_form"):
     st.subheader("1. Applicant Information")
     col1, col2 = st.columns(2)
     
@@ -243,3 +234,18 @@ with st.form(key="master_loan_signing_form"):
         fee_input = st.number_input("Origination Fee (%)", min_value=0.0, max_value=10.0, value=2.5, step=0.1)
 
     st.subheader("3. Full Terms Framework Review")
+    terms_area = st.text_area("Review Legal Provisions & Covenants", value=DEFAULT_TERMS, height=200)
+
+    st.subheader("4. Execute E-Signature Canvas")
+    canvas_result = st_canvas(
+        fill_color="rgba(255, 255, 255, 0)",
+        stroke_width=3,
+        stroke_color="#000000",
+        background_color="#ffffff",
+        height=120,
+        width=400,
+        drawing_mode="freedraw",
+        key="master_signature_canvas",
+    )
+
+    # MASTER FORM OBJECT CLOSING TRIGGER
