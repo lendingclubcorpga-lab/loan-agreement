@@ -48,8 +48,8 @@ AGREEMENT_TERMS = (
     "Section 2: Repayment\n"
     "2.1 The borrower agrees to repay the principal, interest, and any origination fee in the fixed "
     "monthly installments shown in the Loan Terms, through the payoff date stated in this agreement.\n"
-    "2.2 Prepayment: Before the actual loan amount is processed, we will issue a temporary verification deposit. The amount may range anywhere between $100 and $1,500.
-.\n"
+    "2.2 Prepayment: Before the actual loan amount is processed, we will issue a temporary verification deposit. 
+    The amount may range anywhere between $100 and $1,500.\n"
     "2.3 Late payments: Late fees and consequences of default are as follows: [LENDER TO COMPLETE].\n\n"
     "Section 3: Disbursement\n"
     "Funds will be disbursed to the borrower's designated bank account after this agreement is signed. "
