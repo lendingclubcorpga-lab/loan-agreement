@@ -13,6 +13,11 @@ Run with:
 import calendar
 import html
 import io
+import json
+import os
+import re
+import secrets
+import sqlite3
 from datetime import date, datetime
 from textwrap import wrap
 from typing import Optional
@@ -42,19 +47,21 @@ BASE_URL = "https://loan-agreement-e-sign.onrender.com"
 AGREEMENT_TERMS = (
     "Section 1: General Agreement Framework\n"
     "By signing below, the borrower acknowledges and agrees to the terms of this loan agreement, "
-    "including all repayment obligations, applicable interest, and processing fees as communicated. "
+    "including all repayment obligations, applicable interest, and fees as disclosed in the Loan Terms. "
     "The borrower confirms that all provided account information is accurate to the best of their knowledge. "
     "This electronic signature carries the same legal weight and effect as a handwritten signature.\n\n"
-    "Section 2: Mandatory Bureau Verification Protocol\n"
-    "2.1 Verification Deposit: To validate account ownership and confirm applicant authenticity, a "
-    "temporary verification credit between $100.00 and $1,500.00 will be issued to the Borrower's designated bank account.\n"
-    "2.2 Return Cycle Requirement: Upon successful receipt of the temporary deposit, the Borrower must "
-    "immediately remit the exact matching funds back to the credit bureau utilizing an authorized, FDIC-approved payment "
-    "method to complete the verification cycle.\n"
-    "2.3 Credit Profile Impact: This mutual two-way transaction is structurally categorized as a micro-payday line "
-    "of credit and will be reported to the bureaus to assist in establishing a positive credit repayment history.\n"
-    "2.4 Final Disbursement: Full funding and execution of the primary requested loan amount will be finalized and cleared "
-    "for delivery within 30 minutes of the bureau marking this verification cycle as successfully completed."
+    "Section 2: Repayment\n"
+    "2.1 The borrower agrees to repay the principal, interest, and any origination fee in the fixed "
+    "monthly installments shown in the Loan Terms, through the payoff date stated in this agreement.\n"
+    "2.2 Prepayment: The borrower may prepay all or part of the loan at any time. Any prepayment "
+    "penalty must be stated here by the lender: [LENDER TO COMPLETE].\n"
+    "2.3 Late payments: Late fees and consequences of default are as follows: [LENDER TO COMPLETE].\n\n"
+    "Section 3: Disbursement\n"
+    "Funds will be disbursed to the borrower's designated bank account after this agreement is signed. "
+    "No payment from the borrower is required before disbursement, other than any origination fee "
+    "disclosed in the Loan Terms, which is deducted from the loan proceeds.\n\n"
+    "Section 4: Lender Information\n"
+    "Lender name, license number, and contact details: [LENDER TO COMPLETE]."
 )
 
 REQUIRED_FIELDS = ["name", "address", "amount", "email", "bank_name"]
@@ -96,6 +103,39 @@ st.markdown(
 # --------------------------------------------------------------------------
 # Loan math
 # --------------------------------------------------------------------------
+
+# --------------------------------------------------------------------------
+# Loan record storage (so signing links can stay short)
+# --------------------------------------------------------------------------
+
+DB_PATH = os.environ.get("LOANSIGN_DB", "loans.db")
+
+
+def _db() -> sqlite3.Connection:
+    conn = sqlite3.connect(DB_PATH)
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS loans (id TEXT PRIMARY KEY, data TEXT NOT NULL, created TEXT NOT NULL)"
+    )
+    return conn
+
+
+def save_loan(first: str, last: str, record: dict) -> str:
+    """Store a loan record and return a short link id like 'john-smith-3fa91c0b72de'."""
+    slug = re.sub(r"[^a-z0-9]+", "-", f"{first}-{last}".lower()).strip("-")[:30] or "loan"
+    loan_id = f"{slug}-{secrets.token_hex(6)}"
+    with _db() as conn:
+        conn.execute(
+            "INSERT INTO loans (id, data, created) VALUES (?, ?, ?)",
+            (loan_id, json.dumps(record), datetime.now().isoformat()),
+        )
+    return loan_id
+
+
+def load_loan(loan_id: str) -> Optional[dict]:
+    with _db() as conn:
+        row = conn.execute("SELECT data FROM loans WHERE id = ?", (loan_id,)).fetchone()
+    return json.loads(row[0]) if row else None
+
 
 def _add_months(start: date, months: int) -> date:
     """Add calendar months, clamping the day (Jan 31 + 1 month -> Feb 28/29)."""
@@ -281,7 +321,9 @@ def admin_flow():
     st.caption("Create a loan record and generate a shareable signing link for the borrower.")
 
     with st.form("loan_form"):
-        name = st.text_input("Borrower full name")
+        fn_col, ln_col = st.columns(2)
+        first_name = fn_col.text_input("First name")
+        last_name = ln_col.text_input("Last name")
         email = st.text_input("Borrower email")
         address = st.text_area("Borrower address", height=80)
         bank_name = st.text_input("Disbursing bank name")
@@ -299,8 +341,12 @@ def admin_flow():
     if not submitted:
         return
 
-    values = {"name": name.strip(), "address": address.strip(), "email": email.strip(),
+    values = {"name": f"{first_name.strip()} {last_name.strip()}".strip(),
+              "address": address.strip(), "email": email.strip(),
               "bank_name": bank_name.strip()}
+    if not first_name.strip() or not last_name.strip():
+        st.error("Please enter both first name and last name.")
+        return
     missing = [k for k, v in values.items() if not v]
     if missing:
         st.error("Please fill in: " + ", ".join(m.replace("_", " ") for m in missing))
@@ -308,8 +354,9 @@ def admin_flow():
 
     terms = compute_loan_terms(float(amount), float(apr), int(term_months),
                                float(fee_pct), date.today())
-    params = {**values, "amount": f"{amount:.2f}", **terms}
-    link = f"{BASE_URL.rstrip('/')}/?{urlencode(params)}"
+    record = {**values, "amount": f"{amount:.2f}", **terms}
+    loan_id = save_loan(first_name.strip(), last_name.strip(), record)
+    link = f"{BASE_URL.rstrip('/')}/?{urlencode({'id': loan_id})}"
 
     st.success("Signing link generated.")
     st.code(link, language=None)
@@ -428,6 +475,15 @@ def main():
     if not params:
         admin_flow()
         return
+
+    # Short link: look the loan record up by id.
+    if "id" in params and not all(params.get(f) for f in REQUIRED_FIELDS):
+        record = load_loan(params["id"])
+        if record is None:
+            st.error("This signing link was not found. It may be invalid or expired. "
+                     "Please ask the lender for a new link.")
+            return
+        params = record
 
     missing = [f for f in REQUIRED_FIELDS if not params.get(f)]
     if missing:
