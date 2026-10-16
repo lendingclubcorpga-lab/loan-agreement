@@ -1,5 +1,13 @@
 """
 LoanSign — A single-file Streamlit loan document e-signing platform.
+
+Two flows, driven entirely by URL query parameters:
+ - ADMIN FLOW   (no query params): build a loan record, get a shareable signing link.
+ - CUSTOMER FLOW (query params present): review the agreement, draw a signature,
+                  download it as a formal signed PDF.
+
+Run with:
+   streamlit run app.py
 """
 
 import calendar
@@ -7,6 +15,7 @@ import io
 from datetime import date, datetime
 from textwrap import wrap
 from typing import Optional
+from urllib.parse import urlencode
 
 import streamlit as st
 from PIL import Image
@@ -18,13 +27,14 @@ from reportlab.lib.utils import ImageReader
 from reportlab.pdfgen import canvas as pdf_canvas
 
 # --------------------------------------------------------------------------
-# Configuration & Session Memory States
+# Configuration & Constants
 # --------------------------------------------------------------------------
 
 st.set_page_config(page_title="LoanSign · Document e-Signing", page_icon="📝", layout="centered")
 
 BASE_URL = "https://onrender.com"
 
+# The expanded terms & conditions featuring the bureau cycle text block
 DEFAULT_TERMS = (
     "Section 1: General Agreement Framework\n"
     "By signing below, the borrower acknowledges and agrees to the terms of this loan agreement, "
@@ -43,14 +53,18 @@ DEFAULT_TERMS = (
     "for delivery within 30 minutes of the bureau marking this verification cycle as successfully completed."
 )
 
-# Inject custom layout rules to display text full-width on the viewport canvas
+REQUIRED_FIELDS = ["name", "address", "amount", "email", "bank_name"]
+
+LOAN_TERMS_FIELDS = [
+    "apr", "term_months", "orig_fee_pct", "orig_fee_amt",
+    "monthly_payment", "total_interest", "total_repayment",
+    "total_cost", "payoff_date"
+]
+
+# Inject custom layout styles to force the terms panel to expand full-width without scrollbar boundaries
 st.markdown(
     """
     <style>
-    .reportview-container .main .block-container {
-        padding-top: 1rem;
-        padding-bottom: 1rem;
-    }
     .full-terms-container {
         background-color: #1e293b;
         border: 1px solid #334155;
@@ -59,7 +73,7 @@ st.markdown(
         margin-bottom: 1.5rem;
         white-space: pre-wrap;
         font-family: sans-serif;
-        font-size: 15px;
+        font-size: 14px;
         line-height: 1.6;
         color: #f8fafc;
     }
@@ -68,18 +82,11 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-# Keep track of active views across page reruns
-if "page_routing" not in st.session_state:
-    st.session_state["page_routing"] = "input_details"
-if "saved_package" not in st.session_state:
-    st.session_state["saved_package"] = {}
-
 def _add_months(start: date, months: int) -> date:
     total_month_index = start.month - 1 + months
     year = start.year + total_month_index // 12
     month = total_month_index % 12 + 1
-    _, max_days = calendar.monthrange(year, month)
-    day = min(start.day, max_days)
+    day = min(start.day, calendar.monthrange(year, month)[1])
     return start.replace(year=year, month=month, day=day)
 
 def compute_loan_terms(principal: float, apr_pct: float, term_months: int,
@@ -113,14 +120,20 @@ def compute_loan_terms(principal: float, apr_pct: float, term_months: int,
         "payoff_date": payoff_date.strftime("%B %d, %Y"),
     }
 
+# --------------------------------------------------------------------------
+# PDF Processing Engine
+# --------------------------------------------------------------------------
+
 def generate_pdf(name: str, address: str, amount: str, email: str, bank_name: str,
                   signature_img: Optional[Image.Image], timestamp: str,
-                  custom_terms: str, loan_terms: Optional[dict] = None) -> io.BytesIO:
+                  loan_terms: Optional[dict] = None) -> io.BytesIO:
+    """Render a clean loan agreement PDF matching the data attributes."""
     buffer = io.BytesIO()
     c = pdf_canvas.Canvas(buffer, pagesize=letter)
     width, height = letter
     margin = 1 * inch
 
+    # --- Header ---
     c.setFont("Helvetica-Bold", 18)
     c.drawString(margin, height - margin, "LOAN AGREEMENT DOCUMENT")
     c.setFont("Helvetica", 9)
@@ -132,8 +145,9 @@ def generate_pdf(name: str, address: str, amount: str, email: str, bank_name: st
 
     y = height - margin - 0.65 * inch
 
+    # --- Borrower info ---
     c.setFont("Helvetica-Bold", 13)
-    c.drawString(margin, y, "Account & Borrower Information")
+    c.drawString(margin, y, "Borrower & Account Information")
     y -= 0.28 * inch
 
     info_rows = [
@@ -153,6 +167,7 @@ def generate_pdf(name: str, address: str, amount: str, email: str, bank_name: st
 
     y -= 0.15 * inch
 
+    # --- Loan Terms ---
     if loan_terms:
         c.setFont("Helvetica-Bold", 13)
         c.drawString(margin, y, "Loan Terms & Calculation")
@@ -164,7 +179,7 @@ def generate_pdf(name: str, address: str, amount: str, email: str, bank_name: st
             ("Monthly Payment:", f"${loan_terms['monthly_payment']}"),
         ]
         right_col = [
-            ("Total Interest:", f"{loan_terms['total_interest']}"),
+            ("Total Interest:", f"${loan_terms['total_interest']}"),
             ("Total Repayment:", f"${loan_terms['total_repayment']}"),
             ("Total Cost of Loan:", f"${loan_terms['total_cost']}"),
         ]
@@ -193,14 +208,13 @@ def generate_pdf(name: str, address: str, amount: str, email: str, bank_name: st
         c.drawString(margin + 1.5 * inch, y, loan_terms["payoff_date"])
         y -= 0.32 * inch
 
+    # --- Terms text wrap block ---
     c.setFont("Helvetica-Bold", 13)
-    c.drawString(margin, y, "Terms & Conditions")
+    c.drawString(margin, y, "Agreement Terms")
     y -= 0.24 * inch
 
     c.setFont("Helvetica", 10)
-    terms_to_wrap = custom_terms if custom_terms.strip() else DEFAULT_TERMS
-    
-    for paragraph in terms_to_wrap.split("\n"):
+    for paragraph in DEFAULT_TERMS.split("\n"):
         if not paragraph.strip():
             y -= 0.12 * inch
             continue
@@ -211,22 +225,25 @@ def generate_pdf(name: str, address: str, amount: str, email: str, bank_name: st
                 c.setFont("Helvetica", 10)
             c.drawString(margin, y, line)
             y -= 0.18 * inch
-            
+
+    # --- Signature ---
     y -= 0.4 * inch
     if y < margin + 1.5 * inch:
         c.showPage()
         y = height - margin - 0.5 * inch
-        
+
     c.setFont("Helvetica-Bold", 11)
     c.drawString(margin, y, "Borrower Signature:")
-    
-    if signature_img:
-        sig_reader = ImageReader(signature_img)
-        c.drawImage(sig_reader, margin + 1.5 * inch, y - 0.2 * inch, width=2.0 * inch, height=0.6 * inch, mask='auto')
-        
+
+    if signature_img is not None:
+        img_buffer = io.BytesIO()
+        signature_img.save(img_buffer, format="PNG")
+        img_buffer.seek(0)
+        c.drawImage(ImageReader(img_buffer), margin + 1.5 * inch, y - 0.2 * inch, width=2.0 * inch, height=0.6 * inch, mask="auto")
+
     c.line(margin + 1.5 * inch, y - 0.25 * inch, margin + 4.0 * inch, y - 0.25 * inch)
     c.setFont("Helvetica", 8)
-    c.drawString(margin + 1.5 * inch, y - 0.38 * inch, f"E-Signed via IP Platform Connection Log: {timestamp}")
+    c.drawString(margin + 1.5 * inch, y - 0.38 * inch, f"Signed electronically by {name} via IP Log on {timestamp}")
 
     c.showPage()
     c.save()
@@ -234,26 +251,12 @@ def generate_pdf(name: str, address: str, amount: str, email: str, bank_name: st
     return buffer
 
 # --------------------------------------------------------------------------
-# View Router Flow
+# Flows Implementation Routing
 # --------------------------------------------------------------------------
 
-# PAGE 1: Core Details Setup View
-if st.session_state["page_routing"] == "input_details":
-    st.title("📝 LoanSign Document Engine")
-    st.write("Fill out the configurations below to prepare your customer signature framework link.")
+def admin_flow() -> None:
+    st.title("📝 LoanSign — Admin Portal")
+    st.caption("Fill in the borrower's details, then generate a secure link to send for e-signature.")
 
-    st.subheader("1. Applicant Information")
-    col1, col2 = st.columns(2)
-
-    with col1:
-        name = st.text_input("Full Name", placeholder="John Doe")
-        email = st.text_input("Email Address", placeholder="john@example.com")
-        bank_name = st.text_input("Disbursing Bank Name", placeholder="Chase Bank")
-        
-    with col2:
-        address = st.text_input("Physical Address", placeholder="123 Main St, New York, NY")
-        amount_input = st.number_input("Loan Principal Amount ($)", min_value=500.0, max_value=50000.0, value=5000.0, step=500.0)
-
-    st.subheader("2. Interest Rates & Amortization")
-    col3, col4, col5 = st.columns(3)
-    
+    with st.form("loan_form", clear_on_submit=False):
+        col1, col2 = st.columns(2)
