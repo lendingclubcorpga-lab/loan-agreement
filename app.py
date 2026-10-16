@@ -164,7 +164,7 @@ def generate_pdf(name: str, address: str, amount: str, email: str, bank_name: st
             ("Monthly Payment:", f"${loan_terms['monthly_payment']}"),
         ]
         right_col = [
-            ("Total Interest:", f"${loan_terms['total_interest']}"),
+            ("Total Interest:", f"{loan_terms['total_interest']}"),
             ("Total Repayment:", f"${loan_terms['total_repayment']}"),
             ("Total Cost of Loan:", f"${loan_terms['total_cost']}"),
         ]
@@ -256,4 +256,4 @@ if st.session_state["page_routing"] == "input_details":
 
     st.subheader("2. Interest Rates & Amortization")
     col3, col4, col5 = st.columns(3)
-    with col3:
+    
