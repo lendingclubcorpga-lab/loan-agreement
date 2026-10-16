@@ -49,7 +49,9 @@ def _add_months(start: date, months: int) -> date:
     total_month_index = start.month - 1 + months
     year = start.year + total_month_index // 12
     month = total_month_index % 12 + 1
-    day = min(start.day, calendar.monthrange(year, month)[1])
+    # Secure maximum legal days boundary per month mapping safely
+    last_day = calendar.monthrange(year, month)[1]
+    day = min(start.day, last_day)
     return start.replace(year=year, month=month, day=day)
 
 def compute_loan_terms(principal: float, apr_pct: float, term_months: int,
@@ -201,7 +203,6 @@ def generate_pdf(name: str, address: str, amount: str, email: str, bank_name: st
     c.drawString(margin, y, "Borrower Signature:")
     
     if signature_img:
-        # Convert PIL Image for ReportLab drawing usage
         sig_reader = ImageReader(signature_img)
         c.drawImage(sig_reader, margin + 1.5 * inch, y - 0.2 * inch, width=2.0 * inch, height=0.6 * inch, mask='auto')
         
@@ -215,13 +216,13 @@ def generate_pdf(name: str, address: str, amount: str, email: str, bank_name: st
     return buffer
 
 # --------------------------------------------------------------------------
-# Streamlit Application Presentation Structure
+# Streamlit Interface Layout
 # --------------------------------------------------------------------------
 
 st.title("📝 LoanSign Document Engine")
-st.write("Complete the core validation variables to auto-calculate amortization and generate document packages.")
+st.write("Complete the input variables below to generate amortization details and verify loan document packages.")
 
-# Main input collection form block
+# 1. Main Data Ingest Form block
 with st.form(key="loan_application_form"):
     st.subheader("1. Applicant Information")
     col1, col2 = st.columns(2)
