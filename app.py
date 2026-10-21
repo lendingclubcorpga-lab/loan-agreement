@@ -258,10 +258,9 @@ def generate_pdf(name: str, address: str, amount: str, email: str, bank_name: st
     c.drawString(margin, y, "Borrower & Account Information")
     y -= 0.28 * inch
 
-    for label, value in [
+    borrower_details = [
         ("Full Name:", name),
         ("Address:", address),
         ("Disbursing Bank:", bank_name),
         ("Loan Amount:", f"${amount}"),
         ("Email:", email),
-    ]:
