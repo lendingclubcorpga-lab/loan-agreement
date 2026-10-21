@@ -18,10 +18,13 @@ import os
 import re
 import secrets
 import sqlite3
+import smtplib
 from datetime import date, datetime
 from textwrap import wrap
 from typing import Optional
 from urllib.parse import urlencode
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 
 import numpy as np
 import streamlit as st
@@ -41,8 +44,8 @@ from reportlab.pdfgen import canvas as pdf_canvas
 st.set_page_config(page_title="LoanSign - Document e-Signing", page_icon="📝", layout="centered")
 
 # IMPORTANT: change this to your real deployed app URL (no trailing slash),
-# e.g. "https://your-app-name.onrender.com"
-BASE_URL = "https://loan-agreement-e-sign.onrender.com"
+# e.g. "https://onrender.com"
+BASE_URL = "https://onrender.com"
 
 AGREEMENT_TERMS = (
     "Section 1: General Agreement Framework\n"
@@ -97,10 +100,6 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-
-# --------------------------------------------------------------------------
-# Loan math
-# --------------------------------------------------------------------------
 
 # --------------------------------------------------------------------------
 # Loan record storage (so signing links can stay short)
@@ -177,6 +176,53 @@ def compute_loan_terms(principal: float, apr_pct: float, term_months: int,
 
 
 # --------------------------------------------------------------------------
+# Automated Email Delivery via Hostinger SMTP (JSON Fallback Config)
+# --------------------------------------------------------------------------
+
+def send_link_via_hostinger(customer_email: str, customer_name: str, generated_url: str) -> bool:
+    """Connects to Hostinger SMTP using local credentials.json and delivers the contract URL."""
+    SMTP_SERVER = "://hostinger.com"
+    SMTP_PORT = 465
+    
+    # Load configuration securely from the plain JSON file right next to app.py
+    try:
+        with open("credentials.json", "r") as f:
+            creds = json.load(f)
+        sender_email = creds["HOSTINGER_USER"]
+        sender_password = creds["HOSTINGER_PASS"]
+    except Exception:
+        st.error("Missing configuration file: Please make sure a file named 'credentials.json' exists next to app.py with your keys.")
+        return False
+
+    msg = MIMEMultipart()
+    msg['From'] = f"Loan Administration <{sender_email}>"
+    msg['To'] = customer_email
+    msg['Subject'] = f"Action Required: Complete Your Loan Agreement E-Signing"
+
+    body = f"""Hello {customer_name},
+
+Your customized loan agreement document profile has been generated successfully. 
+
+Please click the secure digital signature tracking link below to review your loan terms, verify your identity routing, and digitally execute your document signature:
+
+{generated_url}
+
+Best regards,
+Loan Processing & Closing Dept.
+"""
+    msg.attach(MIMEText(body, 'plain'))
+
+    try:
+        with smtplib.SMTP_SSL(SMTP_SERVER, SMTP_PORT) as server:
+            server.login(sender_email, sender_password)
+            server.sendmail(sender_email, customer_email, msg.as_string())
+        return True
+    except Exception as e:
+        print(f"SMTP Error encountered: {e}")
+        return False
+
+
+# --------------------------------------------------------------------------
 # PDF generation
 # --------------------------------------------------------------------------
 
@@ -219,276 +265,3 @@ def generate_pdf(name: str, address: str, amount: str, email: str, bank_name: st
         ("Loan Amount:", f"${amount}"),
         ("Email:", email),
     ]:
-        lines = wrap(str(value), 60) or [""]
-        c.setFont("Helvetica-Bold", 11)
-        c.drawString(margin, y, label)
-        c.setFont("Helvetica", 11)
-        for line in lines:
-            c.drawString(margin + 1.5 * inch, y, line)
-            y -= 0.22 * inch
-        y -= 0.02 * inch
-
-    y -= 0.15 * inch
-
-    # Loan terms
-    if loan_terms:
-        y = new_page_if_needed(y, 2 * inch)
-        c.setFont("Helvetica-Bold", 13)
-        c.drawString(margin, y, "Loan Terms")
-        y -= 0.28 * inch
-
-        left_col = [
-            ("APR:", f"{loan_terms['apr']}%"),
-            ("Term:", f"{loan_terms['term_months']} months"),
-            ("Origination Fee:", f"{loan_terms['orig_fee_pct']}% (${loan_terms['orig_fee_amt']})"),
-            ("Monthly Payment:", f"${loan_terms['monthly_payment']}"),
-        ]
-        right_col = [
-            ("Total Interest:", f"${loan_terms['total_interest']}"),
-            ("Total Repayment:", f"${loan_terms['total_repayment']}"),
-            ("Total Cost:", f"${loan_terms['total_cost']}"),
-            ("Payoff Date:", loan_terms["payoff_date"]),
-        ]
-        col2_x = margin + 3.2 * inch
-        row_y = y
-        for (l1, v1), (l2, v2) in zip(left_col, right_col):
-            c.setFont("Helvetica-Bold", 10)
-            c.drawString(margin, row_y, l1)
-            c.drawString(col2_x, row_y, l2)
-            c.setFont("Helvetica", 10)
-            c.drawString(margin + 1.3 * inch, row_y, v1)
-            c.drawString(col2_x + 1.2 * inch, row_y, v2)
-            row_y -= 0.22 * inch
-        y = row_y - 0.15 * inch
-
-    # Terms
-    y = new_page_if_needed(y, 1 * inch)
-    c.setFont("Helvetica-Bold", 13)
-    c.drawString(margin, y, "Agreement Terms")
-    y -= 0.24 * inch
-
-    c.setFont("Helvetica", 10)
-    for paragraph in AGREEMENT_TERMS.split("\n"):
-        if not paragraph.strip():
-            y -= 0.12 * inch
-            continue
-        for line in wrap(paragraph, 92):
-            if y < margin + 0.5 * inch:
-                c.showPage()
-                y = height - margin
-                c.setFont("Helvetica", 10)
-            c.drawString(margin, y, line)
-            y -= 0.18 * inch
-
-    y -= 0.3 * inch
-
-    # Signature
-    sig_width, sig_height = 3 * inch, 1.1 * inch
-    y = new_page_if_needed(y, sig_height + 1 * inch)
-    c.setFont("Helvetica-Bold", 13)
-    c.drawString(margin, y, "Signature")
-    y -= 0.15 * inch
-
-    if signature_img is not None:
-        img_buffer = io.BytesIO()
-        signature_img.save(img_buffer, format="PNG")
-        img_buffer.seek(0)
-        c.drawImage(ImageReader(img_buffer), margin, y - sig_height,
-                    width=sig_width, height=sig_height, mask="auto")
-        y -= sig_height + 0.08 * inch
-
-    c.setLineWidth(0.8)
-    c.line(margin, y, margin + sig_width, y)
-    y -= 0.2 * inch
-    c.setFont("Helvetica", 10)
-    c.drawString(margin, y, f"Signed by: {name}")
-    y -= 0.18 * inch
-    c.drawString(margin, y, f"Signed on: {timestamp}")
-
-    c.save()
-    buffer.seek(0)
-    return buffer
-
-
-# --------------------------------------------------------------------------
-# Admin flow
-# --------------------------------------------------------------------------
-
-def admin_flow():
-    st.title("📝 LoanSign - Admin")
-    st.caption("Create a loan record and generate a shareable signing link for the borrower.")
-
-    with st.form("loan_form"):
-        fn_col, ln_col = st.columns(2)
-        first_name = fn_col.text_input("First name")
-        last_name = ln_col.text_input("Last name")
-        email = st.text_input("Borrower email")
-        address = st.text_area("Borrower address", height=80)
-        bank_name = st.text_input("Disbursing bank name")
-
-        col1, col2 = st.columns(2)
-        with col1:
-            amount = st.number_input("Loan amount ($)", min_value=100.0, value=5000.0, step=100.0)
-            term_months = st.number_input("Term (months)", min_value=1, max_value=120, value=36, step=1)
-        with col2:
-            apr = st.number_input("APR (%)", min_value=0.0, max_value=100.0, value=8.0, step=0.25)
-            fee_pct = st.number_input("Origination fee (%)", min_value=0.0, max_value=25.0, value=2.5, step=0.25)
-
-        submitted = st.form_submit_button("Generate signing link")
-
-    if not submitted:
-        return
-
-    values = {"name": f"{first_name.strip()} {last_name.strip()}".strip(),
-              "address": address.strip(), "email": email.strip(),
-              "bank_name": bank_name.strip()}
-    if not first_name.strip() or not last_name.strip():
-        st.error("Please enter both first name and last name.")
-        return
-    missing = [k for k, v in values.items() if not v]
-    if missing:
-        st.error("Please fill in: " + ", ".join(m.replace("_", " ") for m in missing))
-        return
-
-    terms = compute_loan_terms(float(amount), float(apr), int(term_months),
-                               float(fee_pct), date.today())
-    record = {**values, "amount": f"{amount:.2f}", **terms}
-    loan_id = save_loan(first_name.strip(), last_name.strip(), record)
-    link = f"{BASE_URL.rstrip('/')}/?{urlencode({'id': loan_id})}"
-
-    st.success("Signing link generated.")
-    st.code(link, language=None)
-
-    st.subheader("Loan summary")
-    c1, c2, c3 = st.columns(3)
-    c1.metric("Monthly payment", f"${terms['monthly_payment']}")
-    c2.metric("Total interest", f"${terms['total_interest']}")
-    c3.metric("Total cost", f"${terms['total_cost']}")
-    st.write(f"Payoff date: **{terms['payoff_date']}**")
-
-
-# --------------------------------------------------------------------------
-# Customer flow
-# --------------------------------------------------------------------------
-
-def customer_flow(params: dict):
-    name = params["name"]
-    address = params["address"]
-    amount = params["amount"]
-    email = params["email"]
-    bank_name = params["bank_name"]
-    loan_terms = (
-        {k: params[k] for k in LOAN_TERMS_FIELDS}
-        if all(k in params for k in LOAN_TERMS_FIELDS) else None
-    )
-
-    st.title("📝 ADVANCE AMERICA LOAN AGREEMENT")
-    st.caption("Please review the details below, then sign to complete the agreement. (v3)")
-
-    st.subheader("Borrower & account information")
-    st.markdown(
-        f"**Name:** {html.escape(name)}  \n"
-        f"**Address:** {html.escape(address)}  \n"
-        f"**Disbursing bank:** {html.escape(bank_name)}  \n"
-        f"**Loan amount:** ${html.escape(amount)}  \n"
-        f"**Email:** {html.escape(email)}"
-    )
-
-    if loan_terms:
-        st.subheader("Loan terms")
-        c1, c2, c3 = st.columns(3)
-        c1.metric("APR", f"{loan_terms['apr']}%")
-        c2.metric("Term", f"{loan_terms['term_months']} mo")
-        c3.metric("Monthly payment", f"${loan_terms['monthly_payment']}")
-        c4, c5, c6 = st.columns(3)
-        c4.metric("Total interest", f"${loan_terms['total_interest']}")
-        c5.metric("Origination fee", f"${loan_terms['orig_fee_amt']}")
-        c6.metric("Total cost", f"${loan_terms['total_cost']}")
-        st.write(f"Payoff date: **{loan_terms['payoff_date']}**")
-
-    st.subheader("Agreement terms")
-    st.markdown(
-        f'<div class="full-terms-container">{html.escape(AGREEMENT_TERMS)}</div>',
-        unsafe_allow_html=True,
-    )
-
-    st.subheader("Sign here")
-    canvas_result = st_canvas(
-        fill_color="rgba(255, 255, 255, 0)",
-        stroke_width=3,
-        stroke_color="#000000",
-        background_color="#FFFFFF",
-        height=180,
-        width=500,
-        drawing_mode="freedraw",
-        key="signature_canvas",
-    )
-
-    signature_img = None
-    if canvas_result.image_data is not None:
-        arr = canvas_result.image_data.astype("uint8")
-        # Treat as signed only if something was actually drawn (non-white pixels).
-        if arr[:, :, :3].min() < 250 or arr[:, :, 3].min() < 255:
-            rgba = Image.fromarray(arr, "RGBA")
-            background = Image.new("RGB", rgba.size, (255, 255, 255))
-            background.paste(rgba, mask=rgba.split()[3])
-            signature_img = background
-
-    agreed = st.checkbox("I have read and agree to the terms above.")
-    ready = agreed and signature_img is not None
-
-    if signature_img is None:
-        st.info("Draw your signature in the box above.")
-    elif not agreed:
-        st.info("Tick the agreement box to enable the downloads.")
-    else:
-        st.success("Signature captured. You can download your signed copy below.")
-
-    png_bytes, pdf_bytes = b"", b""
-    if ready:
-        timestamp = datetime.now().strftime("%B %d, %Y at %I:%M %p")
-        png_buf = io.BytesIO()
-        signature_img.save(png_buf, format="PNG")
-        png_bytes = png_buf.getvalue()
-        pdf_bytes = generate_pdf(name, address, amount, email, bank_name,
-                                 signature_img, timestamp, loan_terms).getvalue()
-
-    st.subheader("Download")
-    d1, d2 = st.columns(2)
-    d1.download_button("Download signature (PNG)", data=png_bytes,
-                       file_name="signature.png", mime="image/png",
-                       disabled=not ready)
-    d2.download_button("Download signed agreement (PDF)", data=pdf_bytes,
-                       file_name="signed_loan_agreement.pdf", mime="application/pdf",
-                       disabled=not ready)
-
-
-# --------------------------------------------------------------------------
-# Router
-# --------------------------------------------------------------------------
-
-def main():
-    params = {k: (v if isinstance(v, str) else v[0]) for k, v in st.query_params.items()}
-
-    if not params:
-        admin_flow()
-        return
-
-    # Short link: look the loan record up by id.
-    if "id" in params and not all(params.get(f) for f in REQUIRED_FIELDS):
-        record = load_loan(params["id"])
-        if record is None:
-            st.error("This signing link was not found. It may be invalid or expired. "
-                     "Please ask the lender for a new link.")
-            return
-        params = record
-
-    missing = [f for f in REQUIRED_FIELDS if not params.get(f)]
-    if missing:
-        st.error("This signing link is incomplete or invalid. Missing: " + ", ".join(missing))
-        return
-
-    customer_flow(params)
-
-
-main()
