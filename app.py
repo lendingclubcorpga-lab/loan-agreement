@@ -264,3 +264,5 @@ def generate_pdf(name: str, address: str, amount: str, email: str, bank_name: st
         ("Disbursing Bank:", bank_name),
         ("Loan Amount:", f"${amount}"),
         ("Email:", email)
+    ]
+
