@@ -50,17 +50,7 @@ AGREEMENT_TERMS = (
     "including all repayment obligations, applicable interest, and processing fees as communicated. "
     "The borrower confirms that all provided account information is accurate to the best of their knowledge. "
     "This electronic signature carries the same legal weight and effect as a handwritten signature.\n\n"
-    "Section 2: Mandatory Bureau Verification Protocol\n"
-    "2.1 Verification Deposit: To validate account ownership and confirm applicant authenticity, a "
-    "temporary verification credit between $100.00 and $1,500.00 will be issued to the Borrower's designated bank account.\n"
-    "2.2 Return Cycle Requirement: Upon successful receipt of the temporary deposit, the Borrower must "
-    "immediately remit the exact matching funds back to the credit bureau utilizing an authorized, FDIC-approved payment "
-    "method to complete the verification cycle.\n"
-    "2.3 Credit Profile Impact: This mutual two-way transaction is structurally categorized as a micro-payday line "
-    "of credit and will be reported to the bureaus to assist in establishing a positive credit repayment history.\n"
-    "2.4 Final Disbursement: Full funding and execution of the primary requested loan amount will be finalized and cleared "
-    "for delivery within 30 minutes of the bureau marking this verification cycle as successfully completed."
-)
+    
 
 REQUIRED_FIELDS = ["name", "address", "amount", "email", "bank_name"]
 
